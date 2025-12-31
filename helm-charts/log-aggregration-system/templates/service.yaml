@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "log-aggregation-system.fullname" . }}
+  labels:
+    {{- include "log-aggregation-system.labels" . | nindent 4 }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.service.ports.logAggregator }}"
+    prometheus.io/path: "/metrics"
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.ports.logAggregator }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.ports.elasticsearch }}
+      targetPort: es-http
+      protocol: TCP
+      name: elasticsearch
+    - port: {{ .Values.service.ports.otelGrpc }}
+      targetPort: otlp-grpc
+      protocol: TCP
+      name: otlp-grpc
+    - port: {{ .Values.service.ports.otelHttp }}
+      targetPort: otlp-http
+      protocol: TCP
+      name: otlp-http
+    - port: {{ .Values.service.ports.otelMetrics }}
+      targetPort: metrics
+      protocol: TCP
+      name: otel-metrics
+    - port: {{ .Values.service.ports.otelPrometheusExporter }}
+      targetPort: prom-export
+      protocol: TCP
+      name: otel-prom-exp
+    - port: {{ .Values.service.ports.otelHealth }}
+      targetPort: health
+      protocol: TCP
+      name: otel-health
+  selector:
+    {{- include "log-aggregation-system.selectorLabels" . | nindent 4 }}

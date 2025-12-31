@@ -1,0 +1,63 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "log-aggregation-system.fullname" . }}
+  labels:
+    {{- include "log-aggregation-system.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "log-aggregation-system.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic to log aggregator API
+    - from:
+        {{- if .Values.networkPolicy.ingress.namespaceSelector }}
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ingress.namespaceSelector | nindent 12 }}
+        {{- end }}
+        {{- if .Values.networkPolicy.ingress.podSelector }}
+        - podSelector:
+            {{- toYaml .Values.networkPolicy.ingress.podSelector | nindent 12 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 16686
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow all egress if not restricted
+    {{- if not .Values.networkPolicy.egress.restrictExternal }}
+    - {}
+    {{- else }}
+    # Restrict to specific destinations
+    {{- with .Values.networkPolicy.egress.to }}
+    - to:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- end }}
+{{- end }}

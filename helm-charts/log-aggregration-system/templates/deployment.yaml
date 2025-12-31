@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "log-aggregation-system.fullname" . }}
+  labels:
+    {{- include "log-aggregation-system.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "log-aggregation-system.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "log-aggregation-system.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "log-aggregation-system.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        # Main Log Aggregation Application
+        - name: log-aggregator
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.config.logFormat | quote }}
+            - name: OTEL_ENABLED
+              value: {{ .Values.config.otelEnabled | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.config.otelServiceName | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://localhost:4317"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: STORAGE_BACKEND
+              value: {{ .Values.config.storageBackend | quote }}
+            - name: ELASTICSEARCH_URL
+              value: "http://localhost:9200"
+            - name: ELASTICSEARCH_INDEX
+              value: {{ .Values.config.elasticsearchIndex | quote }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources.logAggregator }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+        # Elasticsearch
+        - name: elasticsearch
+          image: {{ .Values.sidecars.elasticsearch.image }}
+          ports:
+            - name: es-http
+              containerPort: 9200
+              protocol: TCP
+          env:
+            - name: discovery.type
+              value: {{ .Values.sidecars.elasticsearch.env.discoveryType | quote }}
+            - name: xpack.security.enabled
+              value: {{ .Values.sidecars.elasticsearch.env.xpackSecurityEnabled | quote }}
+            - name: xpack.security.enrollment.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: {{ .Values.sidecars.elasticsearch.env.esJavaOpts | quote }}
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 60
+            periodSeconds: 5
+            timeoutSeconds: 3
+          {{- if .Values.persistence.elasticsearch.enabled }}
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+          {{- end }}
+          {{- with .Values.resources.elasticsearch }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+        # OpenTelemetry Collector
+        - name: otel-collector
+          image: {{ .Values.sidecars.otelCollector.image }}
+          args: ["--config=/etc/otel-collector-config.yaml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+            - name: prom-export
+              containerPort: 8889
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          volumeMounts:
+            - name: otel-config
+              mountPath: /etc/otel-collector-config.yaml
+              subPath: otel-collector-config.yaml
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          {{- with .Values.resources.otelCollector }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+      volumes:
+        - name: otel-config
+          configMap:
+            name: {{ include "log-aggregation-system.fullname" . }}-otel
+        {{- if .Values.persistence.elasticsearch.enabled }}
+        - name: elasticsearch-data
+          persistentVolumeClaim:
+            claimName: {{ include "log-aggregation-system.fullname" . }}-elasticsearch
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

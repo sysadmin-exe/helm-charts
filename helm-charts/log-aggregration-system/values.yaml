@@ -1,0 +1,198 @@
+# Default values for log-aggregation-system
+replicaCount: 1
+
+# Main application image
+image:
+  repository: sysadminexe/log-aggregation-system
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: 
+  - name: registry-credentials
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+# Service configuration
+service:
+  type: ClusterIP
+  annotations: {}
+  ports:
+    # Log aggregator API
+    logAggregator: 8000
+    # Elasticsearch
+    elasticsearch: 9200
+    # OTEL Collector
+    otelGrpc: 4317
+    otelHttp: 4318
+    otelMetrics: 8888
+    otelPrometheusExporter: 8889
+    otelHealth: 13133
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: log-aggregation.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Resource limits for each container
+resources:
+  logAggregator:
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  elasticsearch:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  otelCollector:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Health probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Persistent volumes for stateful services
+persistence:
+  elasticsearch:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+
+# Application configuration
+config:
+  logLevel: INFO
+  logFormat: json
+  otelEnabled: true
+  otelServiceName: log-aggregation-system
+  storageBackend: elasticsearch
+  elasticsearchIndex: logs
+
+# Sidecar container images
+sidecars:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    env:
+      discoveryType: single-node
+      xpackSecurityEnabled: false
+      esJavaOpts: "-Xms512m -Xmx512m"
+  otelCollector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Pod Disruption Budget for high availability
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1  # Use either minAvailable or maxUnavailable, not both
+
+# Network Policy for security
+networkPolicy:
+  enabled: false
+  ingress:
+    # Allow ingress from specific namespaces
+    namespaceSelector: {}
+    # matchLabels:
+    #   name: app-namespace
+    # Allow ingress from specific pods
+    podSelector: {}
+    # matchLabels:
+    #   app: allowed-app
+  egress:
+    # Allow all egress by default
+    restrictExternal: false
+    # Specific egress destinations (if restrictExternal: true)
+    to: []
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: false
+  # Force creation even if Prometheus Operator CRDs are not detected
+  force: false
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels: {}
+  # Labels that Prometheus uses to discover ServiceMonitors
+  # release: prometheus
+  relabelings: []
+  metricRelabelings: []
+
+# PodMonitor for Prometheus Operator (alternative to ServiceMonitor)
+podMonitor:
+  enabled: false
+  # Force creation even if Prometheus Operator CRDs are not detected
+  force: false
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels: {}
+  relabelings: []
+  metricRelabelings: []

@@ -1,0 +1,251 @@
+# Production Configuration Example
+# This file demonstrates production-ready configuration for the log aggregation system
+
+replicaCount: 2
+
+image:
+  repository: your-registry.io/log-aggregation-system
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+imagePullSecrets:
+  - name: registry-credentials
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations:
+    # For workload identity
+    # iam.gke.io/gcp-service-account: log-aggregation@project-id.iam.gserviceaccount.com
+
+# Pod Annotations - Prometheus scraping enabled
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+# Security Context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Service Configuration
+service:
+  type: ClusterIP
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"  # For AWS internal LB
+  ports:
+    logAggregator: 8000
+    elasticsearch: 9200
+    otelGrpc: 4317
+    otelHttp: 4318
+    otelMetrics: 8888
+    otelPrometheusExporter: 8889
+    otelHealth: 13133
+    jaegerUI: 16686
+    jaegerThrift: 14268
+    prometheus: 9090
+    grafana: 3000
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+  hosts:
+    - host: logs.company.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: logs-tls
+      hosts:
+        - logs.company.com
+
+# Resource Limits - Production Sized
+resources:
+  logAggregator:
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  elasticsearch:
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+  otelCollector:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  jaeger:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  prometheus:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  grafana:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+# Health Probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Persistent Storage - Production Sized
+persistence:
+  elasticsearch:
+    enabled: true
+    storageClass: "fast-ssd"  # Use fast storage class
+    accessMode: ReadWriteOnce
+    size: 100Gi
+
+# Application Configuration
+config:
+  logLevel: INFO
+  logFormat: json
+  otelEnabled: true
+  otelServiceName: log-aggregation-production
+  storageBackend: elasticsearch
+  elasticsearchIndex: logs-prod
+
+# Sidecar Images - Production Versions
+sidecars:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    env:
+      discoveryType: single-node
+      xpackSecurityEnabled: true  # Enable security in production
+      esJavaOpts: "-Xms4g -Xmx4g"  # Increased heap size
+  otelCollector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  ingress:
+    namespaceSelector:
+      matchLabels:
+        name: production
+    podSelector: {}
+  egress:
+    restrictExternal: false
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels:
+    release: prometheus-operator
+
+# PodMonitor (alternative)
+podMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Node Selection
+nodeSelector:
+  workload: observability
+  # node.kubernetes.io/instance-type: m5.2xlarge
+
+# Tolerations for dedicated nodes
+tolerations:
+  - key: "observability"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+# Pod Affinity/Anti-Affinity
+affinity:
+  podAntiAffinity:
+    # Prefer to spread pods across different nodes
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - log-aggregration-system
+          topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    # Prefer nodes with SSD storage
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: node.kubernetes.io/storage-type
+              operator: In
+              values:
+                - ssd

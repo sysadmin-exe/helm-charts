@@ -1,0 +1,17 @@
+{{- if .Values.persistence.elasticsearch.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "log-aggregation-system.fullname" . }}-elasticsearch
+  labels:
+    {{- include "log-aggregation-system.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.elasticsearch.accessMode }}
+  {{- if .Values.persistence.elasticsearch.storageClass }}
+  storageClassName: {{ .Values.persistence.elasticsearch.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.elasticsearch.size }}
+{{- end }}
