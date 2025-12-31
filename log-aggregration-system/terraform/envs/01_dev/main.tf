@@ -1,7 +1,7 @@
 locals {
   environment  = "dev"
   release_name = "log-aggregation-system"
-  cluster_name = "chaos-eng-poc"
+  cluster_name = "app-cluster-dev"
   chart_path   = abspath("${path.module}/../../..")
   values_files = [
     abspath("${path.module}/values-dev.yaml"),

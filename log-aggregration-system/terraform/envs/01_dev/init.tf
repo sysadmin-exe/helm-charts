@@ -12,11 +12,6 @@ terraform {
       version = "~> 3.1"
     }
 
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = "~> 1.19"
-    }
-
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 3.0"
@@ -25,7 +20,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = "eu-west-1"
   default_tags {
     tags = {
       Environment = "dev"
