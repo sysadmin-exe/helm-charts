@@ -1,0 +1,42 @@
+replicaCount: 1
+
+image:
+  tag: "dev"
+
+config:
+  logLevel: DEBUG
+  otelEnabled: true
+
+autoscaling:
+  enabled: false
+
+resources:
+  logAggregator:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  elasticsearch:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  otelCollector:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+ingress:
+  enabled: false
+
+persistence:
+  elasticsearch:
+    enabled: true
+    size: 5Gi

@@ -1,0 +1,52 @@
+replicaCount: 3
+
+image:
+  tag: "1.0.0"
+
+config:
+  logLevel: WARN
+  otelEnabled: true
+
+resources:
+  logAggregator:
+    requests:
+      cpu: 300m
+      memory: 512Mi
+    limits:
+      cpu: 1500m
+      memory: 1Gi
+  elasticsearch:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 3000m
+      memory: 4Gi
+  otelCollector:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 750m
+      memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: logs.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+persistence:
+  elasticsearch:
+    enabled: true
+    size: 50Gi

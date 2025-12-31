@@ -1,0 +1,52 @@
+replicaCount: 2
+
+image:
+  tag: "staging"
+
+config:
+  logLevel: INFO
+  otelEnabled: true
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+resources:
+  logAggregator:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  elasticsearch:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1500m
+      memory: 2Gi
+  otelCollector:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: staging.log-aggregation.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+persistence:
+  elasticsearch:
+    enabled: true
+    size: 20Gi

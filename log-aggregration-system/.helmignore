@@ -21,3 +21,12 @@
 .idea/
 *.tmproj
 .vscode/
+
+# Terraform files and directories
+terraform/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+*.tf
